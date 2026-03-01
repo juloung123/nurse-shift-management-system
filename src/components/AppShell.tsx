@@ -13,7 +13,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-    Stethoscope, Home, LayoutDashboard, LogOut, Users
+    Stethoscope, Home, LayoutDashboard, LogOut, Users, CalendarDays
 } from 'lucide-react';
 import Link from 'next/link';
 import type { Profile } from '@/lib/types';
@@ -108,7 +108,7 @@ export default function AppShell({ children }: AppShellProps) {
                 {children}
             </main>
 
-            {/* Bottom Nav (Manager/Admin get tabs) */}
+            {/* Bottom Nav */}
             {isManager && (
                 <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t shadow-lg">
                     <div className="max-w-lg mx-auto flex">
@@ -120,6 +120,16 @@ export default function AppShell({ children }: AppShellProps) {
                             <Home className="h-5 w-5" />
                             หน้าหลัก
                         </Link>
+                        {profile?.role === 'manager' && (
+                            <Link
+                                href="/my-shifts"
+                                className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${pathname === '/my-shifts' ? 'text-primary' : 'text-muted-foreground'
+                                    }`}
+                            >
+                                <CalendarDays className="h-5 w-5" />
+                                เวรของฉัน
+                            </Link>
+                        )}
                         <Link
                             href="/admin"
                             className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium transition-colors ${pathname === '/admin' ? 'text-primary' : 'text-muted-foreground'

@@ -67,3 +67,12 @@ export interface MonthlyAccumulation {
   afternoonRemainder: number; // hours left over
   otRemainder: number;
 }
+
+export interface WardSettings {
+  id: string;
+  period_key: string;
+  working_days: number;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}

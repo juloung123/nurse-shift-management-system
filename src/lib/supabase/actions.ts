@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from './server';
-import type { Profile, Shift, MonthlySummary } from '../types';
+import type { Profile, Shift, MonthlySummary, WardSettings } from '../types';
 import { getPeriodRange, toDateString } from '../date-utils';
 import { calculateShiftBreakdown } from '../shift-calculations';
 
@@ -212,6 +212,47 @@ export async function deleteUser(
         .from('profiles')
         .delete()
         .eq('id', userId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+}
+
+// =====================================================
+// Ward Settings Actions
+// =====================================================
+
+export async function getWardSettings(
+    periodKey: string
+): Promise<WardSettings | null> {
+    const supabase = await createClient();
+    const { data } = await supabase
+        .from('ward_settings')
+        .select('*')
+        .eq('period_key', periodKey)
+        .single();
+
+    return data;
+}
+
+export async function setWardSettings(
+    periodKey: string,
+    workingDays: number
+): Promise<{ success: boolean; error?: string }> {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    const { error } = await supabase
+        .from('ward_settings')
+        .upsert(
+            {
+                period_key: periodKey,
+                working_days: workingDays,
+                updated_by: user.id,
+                updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'period_key' }
+        );
 
     if (error) return { success: false, error: error.message };
     return { success: true };
