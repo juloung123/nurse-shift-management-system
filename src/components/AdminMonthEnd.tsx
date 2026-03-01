@@ -37,13 +37,27 @@ export default function AdminMonthEnd({
     onFinalized,
     nurse,
     periodKey,
-    prevAfternoonCarryOver,
-    prevOtCarryOver,
-    currentAfternoonHours,
-    currentOtHours,
+    prevAfternoonCarryOver: initialPrevAfternoon,
+    prevOtCarryOver: initialPrevOt,
+    currentAfternoonHours: initialCurrentAfternoon,
+    currentOtHours: initialCurrentOt,
 }: AdminMonthEndProps) {
-    const totalAfternoon = prevAfternoonCarryOver + currentAfternoonHours;
-    const totalOt = prevOtCarryOver + currentOtHours;
+    // Editable carry-over and accumulated values
+    const [prevAfternoon, setPrevAfternoon] = useState(initialPrevAfternoon);
+    const [prevOt, setPrevOt] = useState(initialPrevOt);
+    const [currentAfternoon, setCurrentAfternoon] = useState(initialCurrentAfternoon);
+    const [currentOt, setCurrentOt] = useState(initialCurrentOt);
+
+    // Reset when props change (dialog re-opens with different data)
+    useMemo(() => {
+        setPrevAfternoon(initialPrevAfternoon);
+        setPrevOt(initialPrevOt);
+        setCurrentAfternoon(initialCurrentAfternoon);
+        setCurrentOt(initialCurrentOt);
+    }, [initialPrevAfternoon, initialPrevOt, initialCurrentAfternoon, initialCurrentOt]);
+
+    const totalAfternoon = prevAfternoon + currentAfternoon;
+    const totalOt = prevOt + currentOt;
 
     const maxAfternoonShifts = Math.floor(totalAfternoon / 8);
     const maxOtShifts = Math.floor(totalOt / 8);
@@ -52,6 +66,12 @@ export default function AdminMonthEnd({
     const [paidOtShifts, setPaidOtShifts] = useState(maxOtShifts);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    // Update paid shifts when totals change
+    useMemo(() => {
+        setPaidAfternoonShifts(Math.max(0, Math.floor(totalAfternoon / 8)));
+        setPaidOtShifts(Math.max(0, Math.floor(totalOt / 8)));
+    }, [totalAfternoon, totalOt]);
 
     // Computed carry-overs
     const remainingAfternoon = useMemo(
@@ -72,10 +92,10 @@ export default function AdminMonthEnd({
             const result = await finalizeMonthlySummary({
                 user_id: nurse.id,
                 month_period: periodKey,
-                prev_month_afternoon_carry_over: prevAfternoonCarryOver,
-                prev_month_ot_carry_over: prevOtCarryOver,
-                total_afternoon_hours: currentAfternoonHours,
-                total_ot_hours: currentOtHours,
+                prev_month_afternoon_carry_over: prevAfternoon,
+                prev_month_ot_carry_over: prevOt,
+                total_afternoon_hours: currentAfternoon,
+                total_ot_hours: currentOt,
                 paid_afternoon_shifts: paidAfternoonShifts,
                 paid_ot_shifts: paidOtShifts,
                 remaining_afternoon_carry_over: remainingAfternoon,
@@ -95,10 +115,15 @@ export default function AdminMonthEnd({
             setLoading(false);
         }
     }, [
-        nurse.id, periodKey, prevAfternoonCarryOver, prevOtCarryOver,
-        currentAfternoonHours, currentOtHours, paidAfternoonShifts,
+        nurse.id, periodKey, prevAfternoon, prevOt,
+        currentAfternoon, currentOt, paidAfternoonShifts,
         paidOtShifts, remainingAfternoon, remainingOt, onFinalized, onClose,
     ]);
+
+    const parseNum = (val: string) => {
+        const n = parseFloat(val);
+        return isNaN(n) ? 0 : n;
+    };
 
     return (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -121,16 +146,32 @@ export default function AdminMonthEnd({
                             เวรบ่าย (Afternoon Shift)
                         </Label>
 
-                        {/* Breakdown */}
+                        {/* Breakdown - editable */}
                         <Card className="gradient-card-afternoon border-0">
                             <CardContent className="p-3 space-y-2">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">ยกมาเดือนก่อน</span>
-                                    <span className="font-medium tabular-nums">{prevAfternoonCarryOver} ชม.</span>
+                                <div className="flex items-center justify-between text-sm gap-2">
+                                    <span className="text-muted-foreground whitespace-nowrap">ยกมาเดือนก่อน</span>
+                                    <div className="flex items-center gap-1">
+                                        <Input
+                                            type="number"
+                                            value={prevAfternoon}
+                                            onChange={(e) => setPrevAfternoon(parseNum(e.target.value))}
+                                            className="h-7 w-20 text-right text-sm tabular-nums font-medium"
+                                        />
+                                        <span className="text-xs text-muted-foreground">ชม.</span>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">สะสมเดือนนี้</span>
-                                    <span className="font-medium tabular-nums">+ {currentAfternoonHours} ชม.</span>
+                                <div className="flex items-center justify-between text-sm gap-2">
+                                    <span className="text-muted-foreground whitespace-nowrap">สะสมเดือนนี้</span>
+                                    <div className="flex items-center gap-1">
+                                        <Input
+                                            type="number"
+                                            value={currentAfternoon}
+                                            onChange={(e) => setCurrentAfternoon(parseNum(e.target.value))}
+                                            className="h-7 w-20 text-right text-sm tabular-nums font-medium"
+                                        />
+                                        <span className="text-xs text-muted-foreground">ชม.</span>
+                                    </div>
                                 </div>
                                 <Separator />
                                 <div className="flex justify-between text-sm font-bold">
@@ -183,13 +224,29 @@ export default function AdminMonthEnd({
 
                         <Card className="gradient-card-ot border-0">
                             <CardContent className="p-3 space-y-2">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">ยกมาเดือนก่อน</span>
-                                    <span className="font-medium tabular-nums">{prevOtCarryOver} ชม.</span>
+                                <div className="flex items-center justify-between text-sm gap-2">
+                                    <span className="text-muted-foreground whitespace-nowrap">ยกมาเดือนก่อน</span>
+                                    <div className="flex items-center gap-1">
+                                        <Input
+                                            type="number"
+                                            value={prevOt}
+                                            onChange={(e) => setPrevOt(parseNum(e.target.value))}
+                                            className="h-7 w-20 text-right text-sm tabular-nums font-medium"
+                                        />
+                                        <span className="text-xs text-muted-foreground">ชม.</span>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">สะสมเดือนนี้</span>
-                                    <span className="font-medium tabular-nums">+ {currentOtHours} ชม.</span>
+                                <div className="flex items-center justify-between text-sm gap-2">
+                                    <span className="text-muted-foreground whitespace-nowrap">สะสมเดือนนี้</span>
+                                    <div className="flex items-center gap-1">
+                                        <Input
+                                            type="number"
+                                            value={currentOt}
+                                            onChange={(e) => setCurrentOt(parseNum(e.target.value))}
+                                            className="h-7 w-20 text-right text-sm tabular-nums font-medium"
+                                        />
+                                        <span className="text-xs text-muted-foreground">ชม.</span>
+                                    </div>
                                 </div>
                                 <Separator />
                                 <div className="flex justify-between text-sm font-bold">

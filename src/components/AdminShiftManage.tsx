@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getShiftsForPeriod, getAllProfiles, getMonthlySummary } from '@/lib/supabase/actions';
 import { getCurrentPeriodKey, getDatesInPeriod, toDateString } from '@/lib/date-utils';
 import PeriodSelector from '@/components/PeriodSelector';
-import ShiftCard, { EmptyShiftCard } from '@/components/ShiftCard';
+import ShiftCalendar from '@/components/ShiftCalendar';
 import ShiftEntryForm from '@/components/ShiftEntryForm';
+import WorkingDaysSettings from '@/components/WorkingDaysSettings';
 import type { Profile, Shift } from '@/lib/types';
-import { Loader2, ChevronLeft, Plus, Users } from 'lucide-react';
+import { Loader2, ChevronLeft, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -168,54 +169,32 @@ export default function AdminShiftManage() {
                 </div>
             </div>
 
-            {/* Period Selector */}
-            <PeriodSelector
-                selectedPeriod={periodKey}
-                onPeriodChange={setPeriodKey}
-            />
+            {/* Period Selector + Working Days */}
+            <div className="flex items-center gap-2">
+                <div className="flex-1">
+                    <PeriodSelector
+                        selectedPeriod={periodKey}
+                        onPeriodChange={setPeriodKey}
+                    />
+                </div>
+                <WorkingDaysSettings
+                    periodKey={periodKey}
+                    canEdit={true}
+                />
+            </div>
 
-            {/* Shift List */}
+            {/* Calendar Grid */}
             {shiftsLoading ? (
                 <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
             ) : (
-                <div className="space-y-2">
-                    <h2 className="text-sm font-semibold text-muted-foreground">
-                        รายการเวร ({shifts.length} วัน)
-                    </h2>
-                    {periodDates.map((date) => {
-                        const dateStr = toDateString(date);
-                        const shift = shiftsByDate.get(dateStr);
-                        return shift ? (
-                            <div key={dateStr} className="animate-fade-in">
-                                <ShiftCard
-                                    shift={shift}
-                                    onClick={() => handleCardClick(date, shift)}
-                                />
-                            </div>
-                        ) : (
-                            <EmptyShiftCard
-                                key={dateStr}
-                                date={date}
-                                onClick={() => handleCardClick(date)}
-                            />
-                        );
-                    })}
-                </div>
+                <ShiftCalendar
+                    periodDates={periodDates}
+                    shiftsByDate={shiftsByDate}
+                    onDayClick={handleCardClick}
+                />
             )}
-
-            {/* Floating Add Button */}
-            <Button
-                className="fixed bottom-20 right-4 h-14 w-14 rounded-full shadow-lg gradient-header hover:opacity-90 z-40"
-                onClick={() => {
-                    setSelectedDate(new Date());
-                    setSelectedShift(null);
-                    setFormOpen(true);
-                }}
-            >
-                <Plus className="h-6 w-6" />
-            </Button>
 
             {/* Shift Entry Form — editing for the selected nurse */}
             {selectedDate && (

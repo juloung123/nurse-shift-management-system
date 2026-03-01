@@ -7,11 +7,11 @@ import { getCurrentPeriodKey, getDatesInPeriod, toDateString } from '@/lib/date-
 import { calculateMonthlyAccumulation } from '@/lib/shift-calculations';
 import PeriodSelector from '@/components/PeriodSelector';
 import StatsHeader from '@/components/StatsHeader';
-import ShiftCard, { EmptyShiftCard } from '@/components/ShiftCard';
+import ShiftCalendar from '@/components/ShiftCalendar';
 import ShiftEntryForm from '@/components/ShiftEntryForm';
+import WorkingDaysSettings from '@/components/WorkingDaysSettings';
 import type { Profile, Shift, MonthlyAccumulation } from '@/lib/types';
-import { Loader2, Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 
 interface NurseHomeProps {
     profile: Profile;
@@ -72,7 +72,7 @@ export default function NurseHome({ profile }: NurseHomeProps) {
     // All dates in the period
     const periodDates = useMemo(() => getDatesInPeriod(periodKey), [periodKey]);
 
-    const handleCardClick = useCallback((date: Date, shift?: Shift) => {
+    const handleDayClick = useCallback((date: Date, shift?: Shift) => {
         setSelectedDate(date);
         setSelectedShift(shift || null);
         setFormOpen(true);
@@ -80,11 +80,19 @@ export default function NurseHome({ profile }: NurseHomeProps) {
 
     return (
         <div className="space-y-4 pb-24">
-            {/* Period Selector */}
-            <PeriodSelector
-                selectedPeriod={periodKey}
-                onPeriodChange={setPeriodKey}
-            />
+            {/* Period Selector + Working Days */}
+            <div className="flex items-center gap-2">
+                <div className="flex-1">
+                    <PeriodSelector
+                        selectedPeriod={periodKey}
+                        onPeriodChange={setPeriodKey}
+                    />
+                </div>
+                <WorkingDaysSettings
+                    periodKey={periodKey}
+                    canEdit={profile.role === 'admin' || profile.role === 'manager'}
+                />
+            </div>
 
             {/* Stats */}
             <StatsHeader
@@ -93,50 +101,18 @@ export default function NurseHome({ profile }: NurseHomeProps) {
                 accumulation={accumulation}
             />
 
-            {/* Shift List */}
+            {/* Calendar Grid */}
             {loading ? (
                 <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
             ) : (
-                <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-sm font-semibold text-muted-foreground">
-                            รายการเวร ({shifts.length} วัน)
-                        </h2>
-                    </div>
-                    {periodDates.map((date) => {
-                        const dateStr = toDateString(date);
-                        const shift = shiftsByDate.get(dateStr);
-                        return shift ? (
-                            <div key={dateStr} className="animate-fade-in">
-                                <ShiftCard
-                                    shift={shift}
-                                    onClick={() => handleCardClick(date, shift)}
-                                />
-                            </div>
-                        ) : (
-                            <EmptyShiftCard
-                                key={dateStr}
-                                date={date}
-                                onClick={() => handleCardClick(date)}
-                            />
-                        );
-                    })}
-                </div>
+                <ShiftCalendar
+                    periodDates={periodDates}
+                    shiftsByDate={shiftsByDate}
+                    onDayClick={handleDayClick}
+                />
             )}
-
-            {/* Floating Add Button */}
-            <Button
-                className="fixed bottom-20 right-4 h-14 w-14 rounded-full shadow-lg gradient-header hover:opacity-90 z-40"
-                onClick={() => {
-                    setSelectedDate(new Date());
-                    setSelectedShift(null);
-                    setFormOpen(true);
-                }}
-            >
-                <Plus className="h-6 w-6" />
-            </Button>
 
             {/* Shift Entry Form */}
             {selectedDate && (
