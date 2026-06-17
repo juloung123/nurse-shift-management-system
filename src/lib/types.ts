@@ -76,3 +76,26 @@ export interface WardSettings {
   created_at: string;
   updated_at: string;
 }
+
+export type PasswordResetStatus = 'pending' | 'resolved' | 'rejected';
+
+// A nurse's request to have their password reset. Admin resolves it from the queue.
+export interface PasswordResetRequest {
+  id: string;
+  user_id: string;
+  status: PasswordResetStatus;
+  note: string | null;
+  requested_at: string;   // ISO 8601
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
+// PasswordResetRequest joined to the owning profile — the shape returned by the
+// admin "pending requests" query.
+export interface PasswordResetRequestWithProfile extends PasswordResetRequest {
+  profiles: {
+    full_name: string;
+    username: string;
+    role: UserRole;
+  } | null;
+}

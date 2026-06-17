@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getAllProfiles, updateUserRole, deleteUser } from '@/lib/supabase/actions';
+import PasswordResetRequests from './PasswordResetRequests';
 import type { Profile, UserRole } from '@/lib/types';
 import { Loader2, Users, Shield, ShieldCheck, User, Clock, Search, Check, X, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -126,6 +127,8 @@ export default function AdminUserManage() {
                     <Badge className="bg-amber-500 text-white text-xs">{pendingCount} รอการอนุมัติ</Badge>
                 )}
             </div>
+
+            <PasswordResetRequests />
 
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

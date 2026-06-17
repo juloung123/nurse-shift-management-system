@@ -1,7 +1,8 @@
 'use server';
 
 import { createClient } from './server';
-import type { Profile, Shift, MonthlySummary, WardSettings } from '../types';
+import { createAdminClient } from './admin';
+import type { Profile, Shift, MonthlySummary, WardSettings, PasswordResetRequestWithProfile } from '../types';
 import { getPeriodRange, toDateString } from '../date-utils';
 import { calculateShiftBreakdown } from '../shift-calculations';
 
@@ -253,6 +254,176 @@ export async function setWardSettings(
             },
             { onConflict: 'period_key' }
         );
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+}
+
+// =====================================================
+// Password Reset Actions
+//
+// Forgot-password flow: a logged-out nurse requests a reset (public action);
+// an admin resolves it from the queue by setting a new password.
+//
+// ⚠️ The admin client (createAdminClient) bypasses RLS, so every admin action
+// below MUST re-verify role === 'admin' via the normal session client before
+// using it. Authorization is enforced in code, not by RLS.
+// =====================================================
+
+/** Returns the caller's profile only if they are an admin; otherwise null. */
+async function getAdminProfile(): Promise<Profile | null> {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+    if (!profile || profile.role !== 'admin') return null;
+    return profile as Profile;
+}
+
+/**
+ * Public (logged-out) request to reset a password.
+ *
+ * Always returns generic success — never reveals whether the username exists,
+ * is still pending approval, or already has a pending request. This prevents
+ * account enumeration.
+ */
+export async function requestPasswordReset(
+    username: string
+): Promise<{ success: boolean }> {
+    const cleaned = (username ?? '').toLowerCase().trim();
+    if (!cleaned) return { success: true };
+
+    try {
+        const admin = createAdminClient();
+
+        // Case-insensitive lookup. Escape LIKE wildcards so an unusual username
+        // cannot broaden the match.
+        const escaped = cleaned
+            .replace(/\\/g, '\\\\')
+            .replace(/%/g, '\\%')
+            .replace(/_/g, '\\_');
+        const { data: profile } = await admin
+            .from('profiles')
+            .select('id')
+            .ilike('username', escaped)
+            .maybeSingle();
+
+        // No matching account — silently no-op (still success).
+        if (!profile) return { success: true };
+
+        // Create a pending request. If one already exists for this user the
+        // unique partial index (one pending per user) rejects the insert with
+        // 23505 — that is expected, swallow it silently.
+        const { error: insertError } = await admin
+            .from('password_reset_requests')
+            .insert({ user_id: profile.id });
+
+        if (insertError && insertError.code !== '23505') {
+            console.error('password_reset_requests insert failed:', insertError.message);
+        }
+
+        return { success: true };
+    } catch (err) {
+        // Never surface internal errors on this public endpoint.
+        console.error('requestPasswordReset failed:', err);
+        return { success: true };
+    }
+}
+
+/** Admin: list pending reset requests with the owning profile. */
+export async function getPendingPasswordResets(): Promise<PasswordResetRequestWithProfile[]> {
+    const adminProfile = await getAdminProfile();
+    if (!adminProfile) return [];
+
+    const admin = createAdminClient();
+    // `profiles!user_id` disambiguates which FK to join on — this table has two
+    // FKs to profiles (user_id and resolved_by), so PostgREST needs the hint.
+    const { data } = await admin
+        .from('password_reset_requests')
+        .select('*, profiles:profiles!user_id(full_name, username, role)')
+        .eq('status', 'pending')
+        .order('requested_at', { ascending: false });
+
+    return (data || []) as PasswordResetRequestWithProfile[];
+}
+
+/** Admin: set a new password for the user behind a reset request and resolve it. */
+export async function resolvePasswordReset(
+    requestId: string,
+    newPassword: string
+): Promise<{ success: boolean; error?: string }> {
+    const adminProfile = await getAdminProfile();
+    if (!adminProfile) return { success: false, error: 'ไม่มีสิทธิ์เข้าถึง' };
+
+    if (!newPassword || newPassword.length < 6) {
+        return { success: false, error: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' };
+    }
+
+    const admin = createAdminClient();
+
+    const { data: request, error: loadError } = await admin
+        .from('password_reset_requests')
+        .select('id, user_id, status')
+        .eq('id', requestId)
+        .maybeSingle();
+
+    if (loadError || !request) {
+        return { success: false, error: 'ไม่พบคำขอ' };
+    }
+    // Idempotency guard against double-submit.
+    if (request.status !== 'pending') {
+        return { success: false, error: 'คำขอนี้ดำเนินการไปแล้ว' };
+    }
+
+    const { error: updateError } = await admin.auth.admin.updateUserById(
+        request.user_id,
+        { password: newPassword }
+    );
+
+    if (updateError) {
+        return { success: false, error: updateError.message };
+    }
+
+    const { error: markError } = await admin
+        .from('password_reset_requests')
+        .update({
+            status: 'resolved',
+            resolved_at: new Date().toISOString(),
+            resolved_by: adminProfile.id,
+        })
+        .eq('id', requestId);
+
+    if (markError) {
+        // Password was changed successfully but the status row couldn't be updated.
+        return { success: true, error: 'ตั้งรหัสสำเร็จ แต่บันทึกสถานะคำขอไม่สำเร็จ' };
+    }
+
+    return { success: true };
+}
+
+/** Admin: reject a pending reset request without changing any password. */
+export async function rejectPasswordReset(
+    requestId: string
+): Promise<{ success: boolean; error?: string }> {
+    const adminProfile = await getAdminProfile();
+    if (!adminProfile) return { success: false, error: 'ไม่มีสิทธิ์เข้าถึง' };
+
+    const admin = createAdminClient();
+    const { error } = await admin
+        .from('password_reset_requests')
+        .update({
+            status: 'rejected',
+            resolved_at: new Date().toISOString(),
+            resolved_by: adminProfile.id,
+        })
+        .eq('id', requestId)
+        .eq('status', 'pending');
 
     if (error) return { success: false, error: error.message };
     return { success: true };

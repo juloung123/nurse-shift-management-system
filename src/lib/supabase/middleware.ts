@@ -33,18 +33,19 @@ export async function updateSession(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser();
 
-    // If user is not signed in and the route is not /login, redirect to /login
-    if (
-        !user &&
-        !request.nextUrl.pathname.startsWith('/login')
-    ) {
+    const pathname = request.nextUrl.pathname;
+    const isPublicAuthRoute =
+        pathname === '/login' || pathname === '/forgot-password';
+
+    // If user is not signed in and the route is not public, redirect to /login
+    if (!user && !isPublicAuthRoute) {
         const url = request.nextUrl.clone();
         url.pathname = '/login';
         return NextResponse.redirect(url);
     }
 
-    // If user IS signed in and on /login, redirect to home
-    if (user && request.nextUrl.pathname.startsWith('/login')) {
+    // If user IS signed in and on a public auth route, redirect to home
+    if (user && isPublicAuthRoute) {
         const url = request.nextUrl.clone();
         url.pathname = '/';
         return NextResponse.redirect(url);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -203,6 +204,15 @@ export default function LoginPage() {
                                     autoComplete="current-password"
                                     className="h-12 text-base"
                                 />
+                            </div>
+
+                            <div className="text-right -mt-2">
+                                <Link
+                                    href="/forgot-password"
+                                    className="text-sm text-primary hover:underline font-medium"
+                                >
+                                    ลืมรหัสผ่าน?
+                                </Link>
                             </div>
 
                             {error && (
